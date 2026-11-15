@@ -1,36 +1,120 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 美容室向け LINE 自動応答システム
 
-## Getting Started
+個人経営の美容室オーナー様の「**問い合わせを抱えたまま夜を過ごし、返信を忘れて翌朝謝ってしまう**」を解消するための LINE bot です。
 
-First, run the development server:
+ヒアリングから要件定義・提案までの資料は [`docs/`](./docs) にあります。
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- [要件定義書](./docs/要件定義書.md)
+- [提案書](./docs/提案書.md)
+
+---
+
+## 何をするものか
+
+### お客様から見た動き
+
+| 送ったこと | 返ってくるもの |
+|---|---|
+| 営業時間・メニュー・料金・所要時間 | **自動で即答** |
+| 空き状況 | 「確認してご連絡します」と即返信し、オーナーへ通知 |
+| 予約の変更・キャンセル | 同上（オーナーへは【至急】で通知） |
+| クレーム・髪のお悩み | botは内容に触れず、オーナーへ転送 |
+
+**深夜でも必ず返事が返る**ので、「既読がついたのに返事がない」がなくなります。
+
+### オーナーから見た動き
+
+```
+夜22時　  通知が届く（［✅ 対応済みにする］ボタン付き）
+　　　　　→ そのまま寝てよい
+
+翌朝8時台 未対応のまとめが届く
+　　　　　「未対応のお問い合わせが2件あります」
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+LINEから操作できるコマンド：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| 送る言葉 | 動き |
+|---|---|
+| `未対応` | 未対応の一覧を表示 |
+| `休業 11/20は臨時休業です` | 臨時休業のお知らせを設定 |
+| `休業オフ` | お知らせを取り消し |
+| `ヘルプ` | コマンド一覧 |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 設計で決めたこと
 
-To learn more about Next.js, take a look at the following resources:
+| 決めたこと | 理由 |
+|---|---|
+| **AIに文章を書かせない。すべて定型文** | オーナーの最優先要望が「間違った料金を伝えないこと」だったため |
+| 料金は「◯◯円〜」と幅で表示 | ロング料金とセット割引があり、1つの金額で答えられないため |
+| **空き状況は自動回答しない** | 予約が紙の手帳で管理されており、システムから参照できないため |
+| **「対応済み」はボタンで押してもらう** | LINEは**自アカウントの送信をWebhookで受け取れない**ため、「返信したら自動で消える」は実現できない |
+| リマインドは朝1回＋通知への件数同梱 | Vercel無料プランは定時実行が**1日1回まで**のため、課金せずに同じ効果を出す |
+| 個人情報は最小限・30日で自動削除 | 最終的なやり取りはオーナーが直接行うため、それ以上は不要 |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 構成
 
-## Deploy on Vercel
+```
+お客様のLINE
+　　↕
+LINE Messaging API
+　　↕ Webhook（署名検証あり）
+Next.js（Vercel）
+　　↕
+Supabase … 未対応の記録のみ
+　　↓ プッシュ通知／毎朝8時台の定時実行
+オーナーのLINE
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| ファイル | 役割 |
+|---|---|
+| `src/lib/salon.ts` | **お店の正本データ**。料金・営業時間を変えるときはここだけ |
+| `src/lib/classify.ts` | 問い合わせの振り分け（順番そのものが仕様） |
+| `src/lib/replies.ts` | お客様への定型文 |
+| `src/lib/line.ts` | 署名検証・返信・通知・Flexメッセージ |
+| `src/lib/db.ts` | 未対応の記録・対応済み・自動削除 |
+| `src/lib/time.ts` | 日本時間での営業時間判定 |
+| `src/app/api/line/webhook/` | LINEからの受け口 |
+| `src/app/api/cron/morning/` | 毎朝のまとめ通知 |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 運用コスト
+
+| 項目 | 月額 | 根拠 |
+|---|---|---|
+| LINE | **0円** | 応答メッセージは無料通数にカウントされない。プッシュは最大120通/月で無料枠200通に収まる |
+| Vercel | 0円 | 無料プラン |
+| Supabase | 0円 | 無料プラン |
+
+---
+
+## 開発
+
+```bash
+npm install
+npm run dev
+```
+
+`.env.local` に以下を設定します（`.env.example` 参照）。
+
+```
+LINE_CHANNEL_SECRET
+LINE_CHANNEL_ACCESS_TOKEN
+OWNER_LINE_USER_ID
+NEXT_PUBLIC_SUPABASE_URL
+SUPABASE_SECRET_KEY
+CRON_SECRET
+```
+
+データベースは [`supabase/schema.sql`](./supabase/schema.sql) を Supabase の SQL Editor で実行して作ります。
+
+### テスト
+
+```bash
+npx vitest run
+```
+
+振り分けのテスト19件。**ヒアリングで実際に伺った文面**をそのままテストにしています。
