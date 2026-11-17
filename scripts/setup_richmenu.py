@@ -60,7 +60,10 @@ OWNER = {
     "rows": 1,
     "items": [
         ("未", "未対応の一覧", "残っているもの", (239, 68, 68), "未対応"),
-        ("休", "臨時休業を設定", "お知らせを出す", (245, 158, 11), "休業"),
+        # 「休業 」まで入れた状態でキーボードを開く。日付はオーナー様が打つ。
+        ("休", "臨時休業を設定", "お知らせを出す", (245, 158, 11),
+         {"type": "postback", "data": "closed_prompt",
+          "inputOption": "openKeyboard", "fillInText": "休業 "}),
         ("開", "休業を取り消す", "通常営業に戻す", (16, 185, 129), "休業オフ"),
         ("?", "使い方", "コマンド一覧", (107, 114, 128), "ヘルプ"),
     ],
@@ -141,11 +144,13 @@ def create(spec, token) -> str:
     cw, ch = w // cols, h // rows
 
     areas = []
-    for i, (_, _, _, _, message) in enumerate(spec["items"]):
+    for i, (_, _, _, _, action) in enumerate(spec["items"]):
         col, row = i % cols, i // cols
         areas.append({
             "bounds": {"x": col * cw, "y": row * ch, "width": cw, "height": ch},
-            "action": {"type": "message", "text": message},
+            # 文字列ならそのまま送るボタン、辞書ならそのまま動作として使う
+            "action": action if isinstance(action, dict)
+                      else {"type": "message", "text": action},
         })
 
     menu_id = request("POST", f"{API}/richmenu", token, {
@@ -162,9 +167,33 @@ def create(spec, token) -> str:
     return menu_id
 
 
+def find_menu(token, name):
+    for m in request("GET", f"{API}/richmenu/list", token).get("richmenus", []):
+        if m.get("name") == name:
+            return m["richMenuId"]
+    return None
+
+
 def main():
     token = env("LINE_CHANNEL_ACCESS_TOKEN")
     owner_id = env("OWNER_LINE_USER_ID")
+
+    # オーナー様の端末で、お客様に見えている画面を確かめるための切り替え。
+    # アカウントが1つしかなくても、お客様側の見え方を確認できる。
+    if "--preview-customer" in sys.argv:
+        request("DELETE", f"{API}/user/{owner_id}/richmenu", token)
+        print("オーナー様の割り当てを外しました。")
+        print("→ LINEを開き直すと、お客様用のメニューが表示されます。")
+        print("→ 戻すときは: python3 scripts/setup_richmenu.py --restore-owner")
+        return
+
+    if "--restore-owner" in sys.argv:
+        menu_id = find_menu(token, "owner")
+        if not menu_id:
+            sys.exit("オーナー様用メニューが見つかりません。引数なしで実行してください。")
+        request("POST", f"{API}/user/{owner_id}/richmenu/{menu_id}", token)
+        print("オーナー様用メニューに戻しました。")
+        return
 
     # 古いものを消す（何度流しても同じ状態になるように）
     for m in request("GET", f"{API}/richmenu/list", token).get("richmenus", []):

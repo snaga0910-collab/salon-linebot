@@ -7,9 +7,11 @@
 import { NextResponse } from "next/server";
 import { classify, FORWARD_CATEGORIES } from "@/lib/classify";
 import {
+  appendToInquiry,
   clearClosedNote,
   countOpenInquiries,
   deleteByMessageId,
+  findOpenInquiryByUser,
   getClosedNote,
   listOpenInquiries,
   markAllHandled,
@@ -93,6 +95,13 @@ async function handle(event: LineEvent) {
   if (event.type === "postback" && event.replyToken) {
     const data = event.postback?.data ?? "";
 
+    // リッチメニューの「臨時休業を設定」。
+    // 入力欄に「休業 」が入った状態でキーボードが開くので、書き方だけ案内する。
+    if (data === "closed_prompt") {
+      await reply(event.replyToken, [plainText(CLOSED_PROMPT)]);
+      return;
+    }
+
     if (data === "done_all") {
       const n = await markAllHandled();
       await reply(event.replyToken, [
@@ -142,6 +151,27 @@ async function handle(event: LineEvent) {
 
   // 転送するもの（F-05・F-06・F-07・F-09）
   if (FORWARD_CATEGORIES.includes(category)) {
+    // 続きの連絡（「14時でカットです」など）は、元の問い合わせにまとめる。
+    // ただし「やっぱりキャンセルで」のように別の用件に変わった場合は
+    // 新しい1件として扱う。至急の連絡を埋もれさせないため。
+    const existing =
+      category === "other" && userId ? await findOpenInquiryByUser(userId) : null;
+
+    if (existing) {
+      await reply(replyToken, [
+        plainText("ありがとうございます。あわせてオーナーにお伝えいたします。"),
+      ]);
+      await appendToInquiry(existing.id, text);
+      await push(safeOwnerId(), [
+        plainText(
+          `【追加のご連絡】${existing.display_name ?? "お客様"} 様\n` +
+            `「${text}」\n\n` +
+            `※ 先ほどのお問い合わせの続きです（未対応は増えていません）`,
+        ),
+      ]);
+      return;
+    }
+
     const displayName = userId ? await getDisplayName(userId) : null;
 
     // 先にお客様へお返事する。お待たせしないことが一番大事。

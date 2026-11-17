@@ -57,6 +57,54 @@ export async function recordInquiry(input: {
   return data as Inquiry;
 }
 
+/**
+ * 同じお客様の未対応が残っていれば、それを返す。
+ *
+ * 「土曜空いてますか」のあとに「14時でカットです」と続けて送られたとき、
+ * 2件に分けてしまうとオーナー様の未対応が水増しされ、通知も2回飛ぶ。
+ * ひとつのやり取りは、ひとつの未対応としてまとめる。
+ */
+export async function findOpenInquiryByUser(
+  lineUserId: string,
+  withinHours = 12,
+): Promise<Inquiry | null> {
+  const since = new Date(Date.now() - withinHours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await getDb()
+    .from("sl_inquiries")
+    .select("*")
+    .eq("line_user_id", lineUserId)
+    .is("handled_at", null)
+    .gte("received_at", since)
+    .order("received_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error("findOpenInquiryByUser failed:", error.message);
+    return null;
+  }
+  return (data?.[0] as Inquiry) ?? null;
+}
+
+/** 続きの連絡を、元の問い合わせに書き足す */
+export async function appendToInquiry(id: string, text: string): Promise<void> {
+  const { data, error: readError } = await getDb()
+    .from("sl_inquiries")
+    .select("message_text")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (readError || !data) {
+    console.error("appendToInquiry read failed:", readError?.message);
+    return;
+  }
+
+  const { error } = await getDb()
+    .from("sl_inquiries")
+    .update({ message_text: `${data.message_text}\n${text}` })
+    .eq("id", id);
+  if (error) console.error("appendToInquiry failed:", error.message);
+}
+
 /** 未対応を古い順に取り出す */
 export async function listOpenInquiries(limit = 20): Promise<Inquiry[]> {
   const { data, error } = await getDb()
