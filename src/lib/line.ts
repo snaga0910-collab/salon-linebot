@@ -245,12 +245,35 @@ export function openListMessage(inquiries: Inquiry[], greeting: string): Json {
     });
   }
 
+  // 2件以上あるときだけ、まとめて片付けられるようにする
+  const footer: Json | undefined =
+    inquiries.length >= 2
+      ? {
+          type: "box",
+          layout: "vertical",
+          contents: [
+            {
+              type: "button",
+              style: "secondary",
+              height: "sm",
+              action: {
+                type: "postback",
+                label: `すべて対応済みにする（${inquiries.length}件）`,
+                data: "done_all",
+                displayText: "すべて対応済みにしました",
+              },
+            },
+          ],
+        }
+      : undefined;
+
   return {
     type: "flex",
     altText: `未対応のお問い合わせが${inquiries.length}件あります`,
     contents: {
       type: "bubble",
       body: { type: "box", layout: "vertical", contents },
+      ...(footer ? { footer } : {}),
     },
   };
 }

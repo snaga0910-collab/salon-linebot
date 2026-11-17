@@ -12,6 +12,7 @@ import {
   deleteByMessageId,
   getClosedNote,
   listOpenInquiries,
+  markAllHandled,
   markHandled,
   recordInquiry,
   setClosedNote,
@@ -27,7 +28,13 @@ import {
   textWithMenu,
   verifySignature,
 } from "@/lib/line";
-import { acknowledgement, autoAnswer, GREETING, OWNER_HELP } from "@/lib/replies";
+import {
+  acknowledgement,
+  autoAnswer,
+  CLOSED_PROMPT,
+  GREETING,
+  OWNER_HELP,
+} from "@/lib/replies";
 import { isOpenNow } from "@/lib/time";
 
 type LineEvent = {
@@ -85,6 +92,19 @@ async function handle(event: LineEvent) {
   // 「対応済み」ボタン（F-10）
   if (event.type === "postback" && event.replyToken) {
     const data = event.postback?.data ?? "";
+
+    if (data === "done_all") {
+      const n = await markAllHandled();
+      await reply(event.replyToken, [
+        plainText(
+          n === 0
+            ? "未対応のお問い合わせはありません。"
+            : `${n}件すべてを対応済みにしました。`,
+        ),
+      ]);
+      return;
+    }
+
     if (data.startsWith("done:")) {
       const ok = await markHandled(data.slice("done:".length));
       const left = await countOpenInquiries();
@@ -172,7 +192,8 @@ async function handleOwnerCommand(text: string, replyToken: string): Promise<boo
   if (text.startsWith("休業")) {
     const note = text.slice("休業".length).trim();
     if (note === "") {
-      await reply(replyToken, [plainText(OWNER_HELP)]);
+      // リッチメニューの「臨時休業を設定」を押したとき。書き方を案内する
+      await reply(replyToken, [plainText(CLOSED_PROMPT)]);
       return true;
     }
     await setClosedNote(note);

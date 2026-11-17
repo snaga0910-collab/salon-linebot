@@ -102,6 +102,21 @@ export async function markHandled(id: string): Promise<boolean> {
   return (data ?? []).length > 0;
 }
 
+/** 朝のまとめから「すべて対応済み」にする。件数ぶんのタップを1回にするため */
+export async function markAllHandled(): Promise<number> {
+  const { data, error } = await getDb()
+    .from("sl_inquiries")
+    .update({ handled_at: new Date().toISOString() })
+    .is("handled_at", null)
+    .select("id");
+
+  if (error) {
+    console.error("markAllHandled failed:", error.message);
+    return 0;
+  }
+  return (data ?? []).length;
+}
+
 /** お客様が送信を取り消したとき、記録そのものを消す（要件定義書 F-14） */
 export async function deleteByMessageId(messageId: string): Promise<void> {
   const { error } = await getDb()
