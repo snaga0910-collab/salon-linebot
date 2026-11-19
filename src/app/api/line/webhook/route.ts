@@ -5,7 +5,7 @@
 //   ② 何があっても 200 を返す（LINE が再送し続けるのを防ぐ）
 
 import { NextResponse } from "next/server";
-import { classify, FORWARD_CATEGORIES } from "@/lib/classify";
+import { classify, FORWARD_CATEGORIES, looksLikeQuestion } from "@/lib/classify";
 import {
   appendToInquiry,
   clearClosedNote,
@@ -158,8 +158,15 @@ async function handle(event: LineEvent) {
       category === "other" && userId ? await findOpenInquiryByUser(userId) : null;
 
     if (existing) {
+      // 未対応はひとつにまとめるが、お客様へのお返事は内容に合わせる。
+      // 新しい質問に「あわせてお伝えします」とだけ返すと、
+      // 質問が受け止められていないように見えてしまう。
       await reply(replyToken, [
-        plainText("ありがとうございます。あわせてオーナーにお伝えいたします。"),
+        plainText(
+          looksLikeQuestion(text)
+            ? acknowledgement("other", isOpenNow())
+            : "ありがとうございます。あわせてオーナーにお伝えいたします。",
+        ),
       ]);
       await appendToInquiry(existing.id, text);
       await push(safeOwnerId(), [

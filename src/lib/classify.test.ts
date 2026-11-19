@@ -5,7 +5,7 @@
 // ヒアリングで伺った「実際に届いた文面」を、そのままテストにしている。
 
 import { describe, expect, it } from "vitest";
-import { classify, FORWARD_CATEGORIES } from "./classify";
+import { classify, FORWARD_CATEGORIES, looksLikeQuestion } from "./classify";
 
 describe("ヒアリングで伺った、よくある質問トップ5", () => {
   it("①「来週の土曜って空いてますか？」→ 空き状況", () => {
@@ -116,6 +116,22 @@ describe("表記のゆれ・打ち間違い", () => {
   it("判定できない文は、勝手に答えず『その他』へ倒す", () => {
     expect(classify("ちゅうしゃじょうはありますか")).toBe("other");
     expect(classify("こどもづれでもだいじょうぶですか")).toBe("other");
+  });
+});
+
+describe("続けて届いたとき、補足か新しい質問かを見分ける", () => {
+  it("補足として扱うもの", () => {
+    expect(looksLikeQuestion("14時でカットでお願いします")).toBe(false);
+    expect(looksLikeQuestion("土曜の午後が希望です")).toBe(false);
+    expect(looksLikeQuestion("カットとカラーでお願いします")).toBe(false);
+  });
+
+  it("新しい質問として扱うもの", () => {
+    // 実機で見つかった取りこぼし。空き状況の6分後に届いたこの質問に
+    // 「あわせてお伝えします」とだけ返してしまっていた
+    expect(looksLikeQuestion("駐車場はありますか？")).toBe(true);
+    expect(looksLikeQuestion("子ども連れでも大丈夫ですか")).toBe(true);
+    expect(looksLikeQuestion("クレジットカードは使えますでしょうか")).toBe(true);
   });
 });
 

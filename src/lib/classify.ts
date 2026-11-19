@@ -105,6 +105,20 @@ const NORMALIZED_RULES = RULES.map((r) => ({
   words: r.words.map(normalize),
 }));
 
+/**
+ * 質問の形をしているかどうか。
+ *
+ * 同じお客様から続けて届いたとき、
+ *   「14時でカットでお願いします」＝ さきほどの補足
+ *   「駐車場はありますか？」　　　＝ 新しい質問
+ * のどちらなのかで、お返しする文面を変えるために使う。
+ * （どちらの場合も、未対応はひとつにまとめる）
+ */
+export function looksLikeQuestion(text: string): boolean {
+  const t = normalize(text);
+  return /[?？]/.test(t) || /(ですか|ますか|でしょうか|かな|あります|ありますか)/.test(t);
+}
+
 export function classify(text: string): Category {
   const t = normalize(text);
   for (const rule of NORMALIZED_RULES) {
