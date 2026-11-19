@@ -5,7 +5,12 @@
 //   ② 何があっても 200 を返す（LINE が再送し続けるのを防ぐ）
 
 import { NextResponse } from "next/server";
-import { classify, FORWARD_CATEGORIES, looksLikeQuestion } from "@/lib/classify";
+import {
+  canMergeInto,
+  classify,
+  FORWARD_CATEGORIES,
+  looksLikeQuestion,
+} from "@/lib/classify";
 import {
   appendToInquiry,
   clearClosedNote,
@@ -160,11 +165,12 @@ async function handle(event: LineEvent) {
 
   // 転送するもの（F-05・F-06・F-07・F-09）
   if (FORWARD_CATEGORIES.includes(category)) {
-    // 続きの連絡（「14時でカットです」など）は、元の問い合わせにまとめる。
-    // ただし「やっぱりキャンセルで」のように別の用件に変わった場合は
-    // 新しい1件として扱う。至急の連絡を埋もれさせないため。
-    const existing =
-      category === "other" && userId ? await findOpenInquiryByUser(userId) : null;
+    // 同じお客様の未対応が残っていれば、そこへまとめる。
+    // オーナー様がその方に返す返事は1回なので、未対応も1件であるべき。
+    // ただし「やっぱりキャンセルで」のように急ぎの用件に変わった場合は
+    // 新しい1件として扱う（至急の通知を埋もれさせないため）。
+    const open = userId ? await findOpenInquiryByUser(userId) : null;
+    const existing = open && canMergeInto(open.category, category) ? open : null;
 
     if (existing) {
       // 未対応はひとつにまとめるが、お客様へのお返事は内容に合わせる。

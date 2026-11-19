@@ -119,6 +119,20 @@ export function looksLikeQuestion(text: string): boolean {
   return /[?？]/.test(t) || /(ですか|ますか|でしょうか|かな|あります|ありますか)/.test(t);
 }
 
+/**
+ * 同じお客様の未対応が残っているとき、新しい連絡をそこへまとめてよいか。
+ *
+ * 考え方は「お客様ひとりにつき、オーナー様が返す返事はひとつ」。
+ * ただし、話が急ぎの用件に変わったときだけは別の1件として扱う。
+ * 「空き状況を聞いていた方が、やっぱりキャンセルしたい」という連絡を
+ * 前の問い合わせに埋めてしまうと、至急の通知が届かなくなるため。
+ */
+export function canMergeInto(existing: Category, incoming: Category): boolean {
+  const urgent = incoming === "change" || incoming === "complaint";
+  if (!urgent) return true;
+  return existing === incoming;
+}
+
 export function classify(text: string): Category {
   const t = normalize(text);
   for (const rule of NORMALIZED_RULES) {

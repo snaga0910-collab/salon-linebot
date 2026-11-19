@@ -5,7 +5,12 @@
 // ヒアリングで伺った「実際に届いた文面」を、そのままテストにしている。
 
 import { describe, expect, it } from "vitest";
-import { classify, FORWARD_CATEGORIES, looksLikeQuestion } from "./classify";
+import {
+  canMergeInto,
+  classify,
+  FORWARD_CATEGORIES,
+  looksLikeQuestion,
+} from "./classify";
 
 describe("ヒアリングで伺った、よくある質問トップ5", () => {
   it("①「来週の土曜って空いてますか？」→ 空き状況", () => {
@@ -132,6 +137,25 @@ describe("続けて届いたとき、補足か新しい質問かを見分ける"
     expect(looksLikeQuestion("駐車場はありますか？")).toBe(true);
     expect(looksLikeQuestion("子ども連れでも大丈夫ですか")).toBe(true);
     expect(looksLikeQuestion("クレジットカードは使えますでしょうか")).toBe(true);
+  });
+});
+
+describe("未対応をひとつにまとめてよいか", () => {
+  it("同じ用件が続いたらまとめる", () => {
+    // 実機で見つかった取りこぼし。同じ方の「空き状況」が2件に分かれていた
+    expect(canMergeInto("availability", "availability")).toBe(true);
+    expect(canMergeInto("change", "change")).toBe(true);
+  });
+
+  it("補足や別の質問もまとめる（返す返事は1回だから）", () => {
+    expect(canMergeInto("availability", "other")).toBe(true);
+    expect(canMergeInto("complaint", "other")).toBe(true);
+  });
+
+  it("急ぎの用件に変わったら、別の1件として扱う", () => {
+    // 至急の通知が前の問い合わせに埋もれないようにする
+    expect(canMergeInto("availability", "change")).toBe(false);
+    expect(canMergeInto("other", "complaint")).toBe(false);
   });
 });
 
