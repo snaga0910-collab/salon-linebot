@@ -102,6 +102,15 @@ async function handle(event: LineEvent) {
       return;
     }
 
+    // 朝のまとめに添えた「お知らせを取り消す」ボタン
+    if (data === "closed_off") {
+      await clearClosedNote();
+      await reply(event.replyToken, [
+        plainText("臨時休業のお知らせを取り消しました。通常営業の案内に戻ります。"),
+      ]);
+      return;
+    }
+
     if (data === "done_all") {
       const n = await markAllHandled();
       await reply(event.replyToken, [
@@ -164,7 +173,7 @@ async function handle(event: LineEvent) {
       await reply(replyToken, [
         plainText(
           looksLikeQuestion(text)
-            ? acknowledgement("other", isOpenNow())
+            ? acknowledgement("other", isOpenNow(), closedNote)
             : "ありがとうございます。あわせてオーナーにお伝えいたします。",
         ),
       ]);
@@ -182,7 +191,9 @@ async function handle(event: LineEvent) {
     const displayName = userId ? await getDisplayName(userId) : null;
 
     // 先にお客様へお返事する。お待たせしないことが一番大事。
-    await reply(replyToken, [plainText(acknowledgement(category, isOpenNow()))]);
+    await reply(replyToken, [
+      plainText(acknowledgement(category, isOpenNow(), closedNote)),
+    ]);
 
     const inquiry = await recordInquiry({
       lineUserId: userId,

@@ -27,17 +27,28 @@ export function autoAnswer(category: Category, closedNote: string | null): strin
 }
 
 /** 転送するものへの一次応答。お客様を待たせないための返事（F-05〜F-07・F-09） */
-export function acknowledgement(category: Category, isOpen: boolean): string {
+export function acknowledgement(
+  category: Category,
+  isOpen: boolean,
+  closedNote: string | null = null,
+): string {
   const afterHours = isOpen
     ? ""
     : "\n\n※ ただいま営業時間外のため、翌営業日のご連絡となります。";
+
+  // 日時にかかわる用件のときは、休業のお知らせを先に伝える。
+  // 休みの日をご希望のまま話が進むと、お互いに無駄な往復が生まれる。
+  const closed =
+    closedNote && (category === "availability" || category === "change")
+      ? `⚠️ ${closedNote}\n\n`
+      : "";
 
   switch (category) {
     // ここで希望日時まで聞いてしまう。
     // 「確認します」だけ返すと、オーナーが「いつがご希望ですか」と聞き直すことになり、
     // お客様とのやり取りが最低3往復になる。先に聞けば1往復で済む。
     case "availability":
-      return `お問い合わせありがとうございます。
+      return `${closed}お問い合わせありがとうございます。
 
 空き状況を確認して、オーナーより改めてご連絡いたします。
 
@@ -48,7 +59,7 @@ export function acknowledgement(category: Category, isOpen: boolean): string {
 いただいた内容をもとに確認いたします。${afterHours}`;
 
     case "change":
-      return `ご連絡ありがとうございます。
+      return `${closed}ご連絡ありがとうございます。
 承知いたしました。オーナーより至急ご連絡いたします。
 
 ▼ よろしければ、あわせてお送りください
