@@ -1,8 +1,9 @@
 // お客様にお返しする文章。すべて決め打ちの文。
 // AIに書かせない。間違った料金や営業時間を案内しないことが最優先（要件定義書 N-01）。
 
+import { isButtonText } from "./buttons";
 import { DURATION_TEXT, HOURS_TEXT, MENU_TEXT, SALON } from "./salon";
-import type { Category } from "./classify";
+import { looksLikeQuestion, type Category } from "./classify";
 
 export const GREETING = `友だち追加ありがとうございます。
 ${SALON.name} です。
@@ -91,19 +92,22 @@ export function acknowledgement(
  */
 export function followUpAcknowledgement(
   category: Category,
-  isQuestion: boolean,
+  text: string,
   isOpen: boolean,
   closedNote: string | null,
 ): string {
-  // お気持ちや急ぎにかかわる用件は、必ずその用件の文面でお返しする
-  if (category === "complaint" || category === "change") {
-    return acknowledgement(category, isOpen, closedNote);
-  }
-  // 新しい質問なら、受け止めたことが伝わる文面にする
-  if (isQuestion) {
-    return acknowledgement("other", isOpen, closedNote);
-  }
-  // 先ほどの補足（「14時でカットでお願いします」など）
+  // ① ボタンを押された＝新しいご用件。先ほどの補足ではない
+  // ② お気持ちや急ぎにかかわる用件は、必ずその用件の文面でお返しする
+  // ③ 問いかけの形なら、新しいご質問として受け止める
+  const isNewRequest =
+    isButtonText(text) ||
+    category === "complaint" ||
+    category === "change" ||
+    looksLikeQuestion(text);
+
+  if (isNewRequest) return acknowledgement(category, isOpen, closedNote);
+
+  // それ以外は、先ほどの補足（「14時でカットでお願いします」など）
   return "ありがとうございます。あわせてオーナーにお伝えいたします。";
 }
 

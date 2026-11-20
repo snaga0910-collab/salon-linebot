@@ -6,6 +6,7 @@
 //   だから、お客様への返答は reply、オーナー様への通知だけ push を使う。
 
 import { createHmac, timingSafeEqual } from "crypto";
+import { MENU_ITEMS } from "./buttons";
 import { formatJst } from "./time";
 import type { Inquiry } from "./db";
 
@@ -85,14 +86,6 @@ export async function getDisplayName(userId: string): Promise<string | null> {
 // --- メッセージの組み立て ---
 
 /** 下に出る選択ボタン。お客様に自由入力をさせないための誘導（要件定義書 F-01） */
-const MENU_ITEMS = [
-  { label: "🕐 営業時間", text: "営業時間を教えてください" },
-  { label: "💇 メニューと料金", text: "メニューと料金を教えてください" },
-  { label: "⏱ 施術時間", text: "施術時間はどのくらいかかりますか" },
-  { label: "📅 空き状況", text: "空き状況を知りたいです" },
-  { label: "✏️ 予約の変更", text: "予約を変更したいです" },
-];
-
 export function textWithMenu(text: string): Json {
   return {
     type: "text",

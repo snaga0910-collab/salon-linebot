@@ -5,12 +5,7 @@
 //   ② 何があっても 200 を返す（LINE が再送し続けるのを防ぐ）
 
 import { NextResponse } from "next/server";
-import {
-  canMergeInto,
-  classify,
-  FORWARD_CATEGORIES,
-  looksLikeQuestion,
-} from "@/lib/classify";
+import { canMergeInto, classify, FORWARD_CATEGORIES } from "@/lib/classify";
 import {
   appendToInquiry,
   clearClosedNote,
@@ -185,14 +180,7 @@ async function handle(event: LineEvent) {
     if (existing) {
       // 未対応はひとつにまとめるが、お客様へのお返事は内容に合わせる（F-17）
       await reply(replyToken, [
-        plainText(
-          followUpAcknowledgement(
-            category,
-            looksLikeQuestion(text),
-            isOpenNow(),
-            closedNote,
-          ),
-        ),
+        plainText(followUpAcknowledgement(category, text, isOpenNow(), closedNote)),
       ]);
       await appendToInquiry(existing.id, text);
       // 続きであっても、急ぎの用件は見出しで分かるようにする
