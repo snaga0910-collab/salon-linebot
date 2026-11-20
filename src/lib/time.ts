@@ -21,6 +21,7 @@ export function jstNow(now: Date = new Date()) {
   };
 
   return {
+    year: Number(get("year")),
     month: Number(get("month")),
     day: Number(get("day")),
     // 24時は 0 として扱う
@@ -28,6 +29,24 @@ export function jstNow(now: Date = new Date()) {
     minute: Number(get("minute")),
     weekday: weekdayMap[get("weekday")] ?? 0,
   };
+}
+
+/** 日本時間の日付を「2026-11-20」の形にする。日付の比較はこの形で行う */
+export function jstDateKey(now: Date = new Date()): string {
+  const t = jstNow(now);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${t.year}-${pad(t.month)}-${pad(t.day)}`;
+}
+
+/** 日本時間で◯日後の日付キー。「明日まで」の計算に使う */
+export function jstDateKeyAfter(days: number, now: Date = new Date()): string {
+  return jstDateKey(new Date(now.getTime() + days * 24 * 60 * 60 * 1000));
+}
+
+/** 「2026-11-20」→「11月20日」。お客様とオーナー様に見せる形 */
+export function formatDateKey(key: string): string {
+  const [, m, d] = key.split("-");
+  return `${Number(m)}月${Number(d)}日`;
 }
 
 /** 「11/10 22:14」の形にする。通知に入れる受信時刻 */

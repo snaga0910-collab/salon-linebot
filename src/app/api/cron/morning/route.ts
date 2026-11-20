@@ -8,7 +8,7 @@
 // （通数は「送った相手の人数」で数えるため）。
 
 import { NextResponse } from "next/server";
-import { getClosedNote, listOpenInquiries, purgeOldInquiries } from "@/lib/db";
+import { getClosure, listOpenInquiries, purgeOldInquiries } from "@/lib/db";
 import { closedReminder, openListMessage, ownerUserId, push } from "@/lib/line";
 
 export async function GET(req: Request) {
@@ -20,12 +20,10 @@ export async function GET(req: Request) {
   // 対応済みから30日たった記録を消す（N-08）
   await purgeOldInquiries();
 
-  const [open, closedNote] = await Promise.all([
-    listOpenInquiries(),
-    getClosedNote(),
-  ]);
+  // getClosure は、終わった日のお知らせをここで自動的に消す
+  const [open, closure] = await Promise.all([listOpenInquiries(), getClosure()]);
 
-  if (open.length === 0 && !closedNote) {
+  if (open.length === 0 && !closure) {
     return NextResponse.json({ ok: true, sent: false, open: 0 });
   }
 
@@ -33,9 +31,10 @@ export async function GET(req: Request) {
   if (open.length > 0) {
     messages.push(openListMessage(open, "おはようございます。"));
   }
-  // 臨時休業の取り消し忘れを防ぐ（要件定義書 第13章のリスク）
-  if (closedNote) {
-    messages.push(closedReminder(closedNote));
+  // いま何が出ているかをお伝えする（要件定義書 F-19）。
+  // 取り消しは任意。期限が来れば自動で消える。
+  if (closure) {
+    messages.push(closedReminder(closure));
   }
 
   await push(ownerUserId(), messages);
@@ -44,6 +43,6 @@ export async function GET(req: Request) {
     ok: true,
     sent: true,
     open: open.length,
-    closedNote: Boolean(closedNote),
+    closedUntil: closure?.until ?? null,
   });
 }

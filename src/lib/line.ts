@@ -7,7 +7,8 @@
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { MENU_ITEMS } from "./buttons";
-import { formatJst } from "./time";
+import { formatDateKey, formatJst } from "./time";
+import type { Closure } from "./closed";
 import type { Inquiry } from "./db";
 
 const API = "https://api.line.me/v2/bot";
@@ -220,10 +221,11 @@ export function inquiryNotice(inquiry: Inquiry, otherOpenCount: number): Json {
  * 取り消し忘れると、休みが終わったあとも案内が出続けてしまう。
  * 人の記憶に頼らず、毎朝その場で取り消せるようにしておく。
  */
-export function closedReminder(note: string): Json {
+export function closedReminder(closure: Closure): Json {
+  const until = formatDateKey(closure.until);
   return {
     type: "flex",
-    altText: `臨時休業のお知らせが出ています：${note}`,
+    altText: `臨時休業のお知らせが出ています（${until}まで）`,
     contents: {
       type: "bubble",
       body: {
@@ -233,16 +235,18 @@ export function closedReminder(note: string): Json {
         contents: [
           {
             type: "text",
-            text: "⚠️ 臨時休業のお知らせが出ています",
+            text: "臨時休業のお知らせが出ています",
             weight: "bold",
             size: "sm",
             color: "#D97706",
             wrap: true,
           },
-          { type: "text", text: `「${note}」`, size: "sm", wrap: true },
+          { type: "text", text: `「${closure.text}」`, size: "sm", wrap: true },
           {
             type: "text",
-            text: "お休みが終わっている場合は、取り消してください。",
+            // 取り消しを「やらなければいけないこと」に見せない。
+            // 期限が来れば自動で消えるので、これはただのお知らせ。
+            text: `${until}まで表示し、そのあとは自動で消えます。`,
             size: "xs",
             color: "#9CA3AF",
             wrap: true,
@@ -255,12 +259,11 @@ export function closedReminder(note: string): Json {
         contents: [
           {
             type: "button",
-            style: "primary",
-            color: "#10B981",
+            style: "secondary",
             height: "sm",
             action: {
               type: "postback",
-              label: "お知らせを取り消す",
+              label: "早めに取り下げる",
               data: "closed_off",
               displayText: "休業オフ",
             },

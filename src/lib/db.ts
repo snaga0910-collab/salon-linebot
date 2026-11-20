@@ -3,6 +3,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Category } from "./classify";
+import { isActive, parseClosure, type Closure } from "./closed";
 
 export type Inquiry = {
   id: string;
@@ -200,28 +201,60 @@ export async function purgeOldInquiries(): Promise<void> {
 
 const CLOSED_KEY = "closed_note";
 
-export async function getClosedNote(): Promise<string | null> {
+/**
+ * 出ている臨時休業のお知らせ。
+ *
+ * **終わる日を過ぎていたら、その場で消して null を返す。**
+ * オーナー様が取り消し操作をしなくても、翌日には自動で消える。
+ * 消し忘れたまま誤案内が続く——という事故を、仕組みで起こせなくする。
+ */
+export async function getClosure(): Promise<Closure | null> {
   const { data, error } = await getDb()
     .from("sl_settings")
     .select("value")
     .eq("key", CLOSED_KEY)
     .maybeSingle();
+
   if (error) {
-    console.error("getClosedNote failed:", error.message);
+    console.error("getClosure failed:", error.message);
     return null;
   }
-  const value = (data?.value ?? "").trim();
-  return value === "" ? null : value;
+
+  const raw = (data?.value ?? "").trim();
+  if (raw === "") return null;
+
+  let closure: Closure;
+  try {
+    const parsed = JSON.parse(raw) as Partial<Closure>;
+    if (!parsed.text || !parsed.until) throw new Error("形が違います");
+    closure = { text: parsed.text, until: parsed.until };
+  } catch {
+    // 期限を持たせる前に設定されたお知らせ。今日かぎりとして扱う
+    closure = parseClosure(raw);
+  }
+
+  if (!isActive(closure)) {
+    await clearClosure();
+    return null;
+  }
+  return closure;
 }
 
-export async function setClosedNote(note: string): Promise<void> {
-  const { error } = await getDb()
-    .from("sl_settings")
-    .upsert({ key: CLOSED_KEY, value: note, updated_at: new Date().toISOString() });
-  if (error) console.error("setClosedNote failed:", error.message);
+/** お客様に見せる文章だけが必要なとき */
+export async function getClosedNote(): Promise<string | null> {
+  return (await getClosure())?.text ?? null;
 }
 
-export async function clearClosedNote(): Promise<void> {
+export async function setClosure(closure: Closure): Promise<void> {
+  const { error } = await getDb().from("sl_settings").upsert({
+    key: CLOSED_KEY,
+    value: JSON.stringify(closure),
+    updated_at: new Date().toISOString(),
+  });
+  if (error) console.error("setClosure failed:", error.message);
+}
+
+export async function clearClosure(): Promise<void> {
   const { error } = await getDb().from("sl_settings").delete().eq("key", CLOSED_KEY);
-  if (error) console.error("clearClosedNote failed:", error.message);
+  if (error) console.error("clearClosure failed:", error.message);
 }

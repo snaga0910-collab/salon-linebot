@@ -6,9 +6,10 @@
 
 import { NextResponse } from "next/server";
 import { canMergeInto, classify, FORWARD_CATEGORIES } from "@/lib/classify";
+import { parseClosure, quickClosure } from "@/lib/closed";
 import {
   appendToInquiry,
-  clearClosedNote,
+  clearClosure,
   countOpenInquiries,
   deleteByMessageId,
   findOpenInquiryByUser,
@@ -17,7 +18,7 @@ import {
   markAllHandled,
   markHandled,
   recordInquiry,
-  setClosedNote,
+  setClosure,
 } from "@/lib/db";
 import {
   doneAllCutoff,
@@ -36,11 +37,12 @@ import {
   acknowledgement,
   autoAnswer,
   CLOSED_PROMPT,
+  closureSetMessage,
   followUpAcknowledgement,
   GREETING,
   OWNER_HELP,
 } from "@/lib/replies";
-import { isOpenNow } from "@/lib/time";
+import { formatDateKey, isOpenNow } from "@/lib/time";
 
 type LineEvent = {
   type: string;
@@ -105,11 +107,22 @@ async function handle(event: LineEvent) {
       return;
     }
 
-    // 朝のまとめに添えた「お知らせを取り消す」ボタン
-    if (data === "closed_off") {
-      await clearClosedNote();
+    // ボタン1つで出せる休業（本日・明日）
+    if (data === "closed_today" || data === "closed_tomorrow") {
+      const closure = quickClosure(data === "closed_today" ? "today" : "tomorrow");
+      await setClosure(closure);
       await reply(event.replyToken, [
-        plainText("臨時休業のお知らせを取り消しました。通常営業の案内に戻ります。"),
+        plainText(closureSetMessage(closure.text, formatDateKey(closure.until))),
+      ]);
+      return;
+    }
+
+    // 「お知らせを取り消す」ボタン。期限が来れば自動で消えるので、
+    // これは「予定より早く取り下げたい」ときだけの操作。
+    if (data === "closed_off") {
+      await clearClosure();
+      await reply(event.replyToken, [
+        plainText("臨時休業のお知らせを取り下げました。通常営業の案内に戻ります。"),
       ]);
       return;
     }
@@ -244,21 +257,32 @@ async function handleOwnerCommand(text: string, replyToken: string): Promise<boo
   }
 
   if (text === "休業オフ" || text === "休業解除") {
-    await clearClosedNote();
-    await reply(replyToken, [plainText("臨時休業のお知らせを取り消しました。")]);
+    await clearClosure();
+    await reply(replyToken, [plainText("臨時休業のお知らせを取り下げました。")]);
+    return true;
+  }
+
+  if (text === "本日休業" || text === "明日休業") {
+    const closure = quickClosure(text === "本日休業" ? "today" : "tomorrow");
+    await setClosure(closure);
+    await reply(replyToken, [
+      plainText(closureSetMessage(closure.text, formatDateKey(closure.until))),
+    ]);
     return true;
   }
 
   if (text.startsWith("休業")) {
     const note = text.slice("休業".length).trim();
     if (note === "") {
-      // リッチメニューの「臨時休業を設定」を押したとき。書き方を案内する
+      // リッチメニューの「日付を指定」を押したとき。書き方を案内する
       await reply(replyToken, [plainText(CLOSED_PROMPT)]);
       return true;
     }
-    await setClosedNote(note);
+    // 文中の日付を読み取り、その日までで自動的に終わるようにする
+    const closure = parseClosure(note);
+    await setClosure(closure);
     await reply(replyToken, [
-      plainText(`臨時休業のお知らせを設定しました。\n\n「${note}」\n\n営業時間を聞かれた際に、この文章が先に表示されます。`),
+      plainText(closureSetMessage(closure.text, formatDateKey(closure.until))),
     ]);
     return true;
   }
