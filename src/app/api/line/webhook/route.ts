@@ -25,8 +25,10 @@ import {
   setClosedNote,
 } from "@/lib/db";
 import {
+  doneAllCutoff,
   getDisplayName,
   inquiryNotice,
+  isDoneAll,
   openListMessage,
   ownerUserId,
   plainText,
@@ -116,13 +118,20 @@ async function handle(event: LineEvent) {
       return;
     }
 
-    if (data === "done_all") {
-      const n = await markAllHandled();
+    if (isDoneAll(data)) {
+      // 一覧をお送りしたあとに届いた問い合わせは残す。
+      // まだ見ていない問い合わせを消してしまわないため。
+      const n = await markAllHandled(doneAllCutoff(data) ?? undefined);
+      const left = await countOpenInquiries();
+      const tail =
+        left > 0
+          ? `\n\nそのあとに届いた${left}件は残してあります。\n「未対応」と送るとご確認いただけます。`
+          : "";
       await reply(event.replyToken, [
         plainText(
           n === 0
             ? "未対応のお問い合わせはありません。"
-            : `${n}件すべてを対応済みにしました。`,
+            : `${n}件すべてを対応済みにしました。${tail}`,
         ),
       ]);
       return;

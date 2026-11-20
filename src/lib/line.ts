@@ -110,6 +110,32 @@ export function plainText(text: string): Json {
   return { type: "text", text };
 }
 
+// --- 「すべて対応済みにする」ボタンの中身（要件定義書 F-18） ---
+//
+// ボタンには「いつの一覧か」を持たせる。
+// オーナー様が古い通知をあとから押したとき、
+// そのあとに届いた問い合わせまで消さないようにするため。
+
+const DONE_ALL = "done_all";
+
+export function doneAllData(listedAt: string): string {
+  return `${DONE_ALL}:${listedAt}`;
+}
+
+/**
+ * 押されたボタンから「いつの一覧か」を取り出す。
+ * 時刻を持たない古いボタンは null（＝全件が対象）を返す。
+ */
+export function doneAllCutoff(data: string): string | null {
+  if (!data.startsWith(`${DONE_ALL}:`)) return null;
+  const at = data.slice(DONE_ALL.length + 1).trim();
+  return at === "" ? null : at;
+}
+
+export function isDoneAll(data: string): boolean {
+  return data === DONE_ALL || data.startsWith(`${DONE_ALL}:`);
+}
+
 const LABEL: Record<string, string> = {
   availability: "空き状況のお問い合わせ",
   change: "【至急】予約の変更・キャンセル",
@@ -294,7 +320,9 @@ export function openListMessage(inquiries: Inquiry[], greeting: string): Json {
   if (rest > 0) {
     contents.push({
       type: "text",
-      text: `ほか${rest}件あります（「未対応」と送ると続きが見られます）`,
+      // 「未対応」と送っても同じ5件が出るだけなので、そう案内してはいけない。
+      // 上の5件を片付ければ次の5件が出る、が正しい。
+      text: `ほか${rest}件あります（上の5件を対応済みにすると、続きが表示されます）`,
       size: "xs",
       color: "#9CA3AF",
       margin: "lg",
@@ -302,7 +330,8 @@ export function openListMessage(inquiries: Inquiry[], greeting: string): Json {
     });
   }
 
-  // 2件以上あるときだけ、まとめて片付けられるようにする
+  // 2件以上あるときだけ、まとめて片付けられるようにする。
+  // ボタンには、この一覧をお送りした時刻を持たせる（doneAllData のコメント参照）
   const footer: Json | undefined =
     inquiries.length >= 2
       ? {
@@ -316,7 +345,7 @@ export function openListMessage(inquiries: Inquiry[], greeting: string): Json {
               action: {
                 type: "postback",
                 label: `すべて対応済みにする（${inquiries.length}件）`,
-                data: "done_all",
+                data: doneAllData(new Date().toISOString()),
                 displayText: "すべて対応済みにしました",
               },
             },

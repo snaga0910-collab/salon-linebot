@@ -150,13 +150,25 @@ export async function markHandled(id: string): Promise<boolean> {
   return (data ?? []).length > 0;
 }
 
-/** 朝のまとめから「すべて対応済み」にする。件数ぶんのタップを1回にするため */
-export async function markAllHandled(): Promise<number> {
-  const { data, error } = await getDb()
+/**
+ * 「すべて対応済みにする」ボタン（要件定義書 F-18）。
+ *
+ * before には、一覧をお送りした時刻が入る。
+ * これより新しく届いた問い合わせは対象にしない。
+ *
+ * 朝8時の一覧を見たオーナー様が、9時に届いた問い合わせを知らないまま
+ * 10時にボタンを押すことがある。そのとき9時の1件まで消してしまうと、
+ * 「見ていない問い合わせが消える」という最悪の壊れ方になる。
+ */
+export async function markAllHandled(before?: string): Promise<number> {
+  let q = getDb()
     .from("sl_inquiries")
     .update({ handled_at: new Date().toISOString() })
-    .is("handled_at", null)
-    .select("id");
+    .is("handled_at", null);
+
+  if (before) q = q.lte("received_at", before);
+
+  const { data, error } = await q.select("id");
 
   if (error) {
     console.error("markAllHandled failed:", error.message);
