@@ -37,11 +37,15 @@ export function acknowledgement(
     ? ""
     : "\n\n※ ただいま営業時間外のため、翌営業日のご連絡となります。";
 
-  // 日時にかかわる用件のときは、休業のお知らせを先に伝える。
+  // 日時にかかわる用件のときは、休業のお知らせも伝える。
   // 休みの日をご希望のまま話が進むと、お互いに無駄な往復が生まれる。
+  //
+  // ただし、お客様はまだ日にちを言っていない。
+  // いきなり ⚠️ から始めると、断られたように読めてしまうので、
+  // まずお礼を述べ、そのうえで「なお」として添える。
   const closed =
     closedNote && (category === "availability" || category === "change")
-      ? `⚠️ ${closedNote}\n\n`
+      ? `\n⚠️ なお、${closedNote}\n`
       : "";
 
   switch (category) {
@@ -49,10 +53,10 @@ export function acknowledgement(
     // 「確認します」だけ返すと、オーナーが「いつがご希望ですか」と聞き直すことになり、
     // お客様とのやり取りが最低3往復になる。先に聞けば1往復で済む。
     case "availability":
-      return `${closed}お問い合わせありがとうございます。
+      return `お問い合わせありがとうございます。
 
 空き状況を確認して、オーナーより改めてご連絡いたします。
-
+${closed}
 ▼ よろしければ、あわせてお送りください
 ・ご希望の日にちと時間帯（第2希望までいただけると助かります）
 ・ご希望のメニュー（カット／カラー など）
@@ -60,9 +64,9 @@ export function acknowledgement(
 いただいた内容をもとに確認いたします。${afterHours}`;
 
     case "change":
-      return `${closed}ご連絡ありがとうございます。
+      return `ご連絡ありがとうございます。
 承知いたしました。オーナーより至急ご連絡いたします。
-
+${closed}
 ▼ よろしければ、あわせてお送りください
 ・ご予約いただいている日時
 ・ご希望の変更先（キャンセルの場合はその旨）${afterHours}`;
@@ -94,7 +98,6 @@ export function followUpAcknowledgement(
   category: Category,
   text: string,
   isOpen: boolean,
-  closedNote: string | null,
 ): string {
   // ① ボタンを押された＝新しいご用件。先ほどの補足ではない
   // ② お気持ちや急ぎにかかわる用件は、必ずその用件の文面でお返しする
@@ -105,7 +108,10 @@ export function followUpAcknowledgement(
     category === "change" ||
     looksLikeQuestion(text);
 
-  if (isNewRequest) return acknowledgement(category, isOpen, closedNote);
+  // 休業のお知らせは繰り返さない。
+  // 続きの連絡ということは、直近のお返事で一度お伝えしている。
+  // 1通のなかで同じ警告を何度も見せると、かえって読み飛ばされる。
+  if (isNewRequest) return acknowledgement(category, isOpen, null);
 
   // それ以外は、先ほどの補足（「14時でカットでお願いします」など）
   return "ありがとうございます。あわせてオーナーにお伝えいたします。";

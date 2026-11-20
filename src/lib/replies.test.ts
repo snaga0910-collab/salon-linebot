@@ -7,7 +7,7 @@
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import { MENU_ITEMS, isButtonText } from "./buttons";
-import { followUpAcknowledgement } from "./replies";
+import { acknowledgement, autoAnswer, followUpAcknowledgement } from "./replies";
 
 const OPEN = true;
 const NO_NOTE = null;
@@ -15,7 +15,7 @@ const NO_NOTE = null;
 const THANKS = "ありがとうございます。あわせてオーナーにお伝えいたします。";
 
 function followUp(text: string, category: Parameters<typeof followUpAcknowledgement>[0]) {
-  return followUpAcknowledgement(category, text, OPEN, NO_NOTE);
+  return followUpAcknowledgement(category, text, OPEN);
 }
 
 describe("ボタンの文面かどうか", () => {
@@ -86,18 +86,46 @@ describe("続けて届いた連絡へのお返事", () => {
   });
 
   it("営業時間外なら、その旨を添える", () => {
-    expect(followUpAcknowledgement("complaint", "髪が痛みました", false, NO_NOTE)).toContain(
+    expect(followUpAcknowledgement("complaint", "髪が痛みました", false)).toContain(
       "翌営業日",
     );
   });
+});
 
-  it("臨時休業中に予約変更が届いたら、休業のお知らせを先に出す", () => {
-    const text = followUpAcknowledgement(
-      "change",
-      "予約を変更したいです",
-      OPEN,
-      "明日は臨時休業です",
-    );
-    expect(text.indexOf("明日は臨時休業です")).toBeLessThan(text.indexOf("至急"));
+describe("臨時休業のお知らせの出し方", () => {
+  const NOTE = "明日は急遽都合によりお休みをいただきます";
+
+  it("営業時間を聞かれたら、いちばん上に出す", () => {
+    // 「何時まで？」への答えとしては、休みであることが最重要
+    const text = autoAnswer("hours", NOTE) as string;
+    expect(text.startsWith(`⚠️ ${NOTE}`)).toBe(true);
+  });
+
+  it("空き状況では、お礼のあとに「なお」として添える", () => {
+    // お客様はまだ日にちを言っていない。⚠️ で始めると断られたように読める
+    const text = acknowledgement("availability", OPEN, NOTE);
+    expect(text.startsWith("お問い合わせありがとうございます")).toBe(true);
+    expect(text).toContain(`⚠️ なお、${NOTE}`);
+    // 希望日時を伺う前に出す（休みの日をご希望のまま進めないため）
+    expect(text.indexOf("なお、")).toBeLessThan(text.indexOf("▼"));
+  });
+
+  it("予約の変更でも、承ったあとに添える", () => {
+    const text = acknowledgement("change", OPEN, NOTE);
+    expect(text.startsWith("ご連絡ありがとうございます")).toBe(true);
+    expect(text).toContain(`⚠️ なお、${NOTE}`);
+  });
+
+  it("ご相談には出さない（お気持ちの話に休業は関係ない）", () => {
+    expect(acknowledgement("complaint", OPEN, NOTE)).not.toContain(NOTE);
+  });
+
+  it("続きの連絡には出さない（直近のお返事で一度お伝えしている）", () => {
+    // 1通のなかで同じ警告を繰り返すと、かえって読み飛ばされる
+    expect(followUp("空き状況を知りたいです", "availability")).not.toContain("なお、");
+  });
+
+  it("お知らせがなければ、何も足さない", () => {
+    expect(acknowledgement("availability", OPEN, NO_NOTE)).not.toContain("⚠️");
   });
 });

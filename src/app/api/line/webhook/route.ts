@@ -180,7 +180,7 @@ async function handle(event: LineEvent) {
     if (existing) {
       // 未対応はひとつにまとめるが、お客様へのお返事は内容に合わせる（F-17）
       await reply(replyToken, [
-        plainText(followUpAcknowledgement(category, text, isOpenNow(), closedNote)),
+        plainText(followUpAcknowledgement(category, text, isOpenNow())),
       ]);
       await appendToInquiry(existing.id, text);
       // 続きであっても、急ぎの用件は見出しで分かるようにする
