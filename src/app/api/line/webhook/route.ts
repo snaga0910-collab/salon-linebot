@@ -41,6 +41,7 @@ import {
   acknowledgement,
   autoAnswer,
   CLOSED_PROMPT,
+  followUpAcknowledgement,
   GREETING,
   OWNER_HELP,
 } from "@/lib/replies";
@@ -182,20 +183,28 @@ async function handle(event: LineEvent) {
     const existing = open && canMergeInto(open.category, category) ? open : null;
 
     if (existing) {
-      // 未対応はひとつにまとめるが、お客様へのお返事は内容に合わせる。
-      // 新しい質問に「あわせてお伝えします」とだけ返すと、
-      // 質問が受け止められていないように見えてしまう。
+      // 未対応はひとつにまとめるが、お客様へのお返事は内容に合わせる（F-17）
       await reply(replyToken, [
         plainText(
-          looksLikeQuestion(text)
-            ? acknowledgement("other", isOpenNow(), closedNote)
-            : "ありがとうございます。あわせてオーナーにお伝えいたします。",
+          followUpAcknowledgement(
+            category,
+            looksLikeQuestion(text),
+            isOpenNow(),
+            closedNote,
+          ),
         ),
       ]);
       await appendToInquiry(existing.id, text);
+      // 続きであっても、急ぎの用件は見出しで分かるようにする
+      const head =
+        category === "change"
+          ? "【至急・追加のご連絡】"
+          : category === "complaint"
+            ? "【要対応・追加のご連絡】"
+            : "【追加のご連絡】";
       await push(safeOwnerId(), [
         plainText(
-          `【追加のご連絡】${existing.display_name ?? "お客様"} 様\n` +
+          `${head}${existing.display_name ?? "お客様"} 様\n` +
             `「${text}」\n\n` +
             `※ 先ほどのお問い合わせの続きです（未対応は増えていません）`,
         ),

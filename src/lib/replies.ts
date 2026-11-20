@@ -80,6 +80,33 @@ export function acknowledgement(
   }
 }
 
+/**
+ * 続けて届いた連絡へのお返事（F-17）。
+ *
+ * 未対応はひとつにまとめるが、**お返しする文面は内容に合わせる**。
+ * まとめる都合を、お客様に見せてはいけない。
+ *
+ * とくに「髪が傷んだ」のようなご相談に
+ * 「ありがとうございます。あわせてお伝えします」と返してはならない。
+ */
+export function followUpAcknowledgement(
+  category: Category,
+  isQuestion: boolean,
+  isOpen: boolean,
+  closedNote: string | null,
+): string {
+  // お気持ちや急ぎにかかわる用件は、必ずその用件の文面でお返しする
+  if (category === "complaint" || category === "change") {
+    return acknowledgement(category, isOpen, closedNote);
+  }
+  // 新しい質問なら、受け止めたことが伝わる文面にする
+  if (isQuestion) {
+    return acknowledgement("other", isOpen, closedNote);
+  }
+  // 先ほどの補足（「14時でカットでお願いします」など）
+  return "ありがとうございます。あわせてオーナーにお伝えいたします。";
+}
+
 // --- オーナー様専用のコマンド（スマホから操作できるようにするため：F-08・F-13） ---
 
 export const OWNER_HELP = `【オーナー様メニュー】
