@@ -3,7 +3,8 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Category } from "./classify";
-import { isActive, parseClosure, type Closure } from "./closed";
+import { isActive, type Closure } from "./closed";
+import { jstDateKey } from "./time";
 
 export type Inquiry = {
   id: string;
@@ -229,8 +230,12 @@ export async function getClosure(): Promise<Closure | null> {
     if (!parsed.text || !parsed.until) throw new Error("形が違います");
     closure = { text: parsed.text, until: parsed.until };
   } catch {
-    // 期限を持たせる前に設定されたお知らせ。今日かぎりとして扱う
-    closure = parseClosure(raw);
+    // 期限を持たせる前に設定されたお知らせ。今日かぎりとして扱う。
+    //
+    // ここで文面を読み直してはいけない。
+    // 「明日は臨時休業です」を毎回読み直すと、
+    // 期限がいつまでも明日に伸び続け、永久に消えなくなる。
+    closure = { text: raw, until: jstDateKey() };
   }
 
   if (!isActive(closure)) {
