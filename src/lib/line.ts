@@ -275,6 +275,23 @@ export function closedReminder(closure: Closure): Json {
 }
 
 /**
+ * 一覧に載せる、問い合わせの要約。
+ *
+ * まとめた問い合わせ（F-16）は、続きの連絡のぶんだけ行が増えていく。
+ * 実機で5行になり、一覧が読みづらくなった。
+ *
+ * 一覧は「誰の、何の件か」を見るための目次であって、本文ではない。
+ * オーナー様は結局トークを開いて返信するので、ここは短くてよい。
+ */
+export function summarize(messageText: string, limit = 50): string {
+  const lines = messageText.split("\n").filter((l) => l.trim() !== "");
+  const head = lines[0] ?? "";
+  const shortened = head.length > limit ? `${head.slice(0, limit)}…` : head;
+  const rest = lines.length - 1;
+  return rest > 0 ? `${shortened}（ほか${rest}件のご連絡）` : shortened;
+}
+
+/**
  * 未対応の一覧。
  * 毎朝のまとめ（F-11）と、「未対応」と送られたとき（F-13）の両方で使う。
  */
@@ -307,7 +324,7 @@ export function openListMessage(inquiries: Inquiry[], greeting: string): Json {
           color: "#6B7280",
           wrap: true,
         },
-        { type: "text", text: `「${q.message_text}」`, size: "sm", wrap: true },
+        { type: "text", text: `「${summarize(q.message_text)}」`, size: "sm", wrap: true },
         doneButton(q.id),
       ],
     });

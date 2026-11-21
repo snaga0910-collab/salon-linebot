@@ -4,7 +4,13 @@
 // 返信忘れを防ぐことがこのシステムの目的なので、一番こわい壊れ方になる。
 
 import { describe, expect, it } from "vitest";
-import { doneAllCutoff, doneAllData, isDoneAll, openListMessage } from "./line";
+import {
+  doneAllCutoff,
+  doneAllData,
+  isDoneAll,
+  openListMessage,
+  summarize,
+} from "./line";
 import type { Inquiry } from "./db";
 
 function inquiry(id: string, receivedAt: string): Inquiry {
@@ -36,6 +42,38 @@ describe("ボタンに「いつの一覧か」を持たせる", () => {
     expect(isDoneAll("done:abc-123")).toBe(false);
     expect(isDoneAll("closed_off")).toBe(false);
     expect(isDoneAll("closed_prompt")).toBe(false);
+  });
+});
+
+describe("一覧に載せる要約", () => {
+  it("1件だけならそのまま出す", () => {
+    expect(summarize("空き状況を知りたいです")).toBe("空き状況を知りたいです");
+  });
+
+  it("まとめた問い合わせは、最初の用件と件数にする", () => {
+    // 実機で5行に膨らみ、一覧が読みづらくなった。
+    // 一覧は「誰の、何の件か」を見る目次であって、本文ではない
+    const merged = [
+      "髪がバサバサなんですけどカットいくらですか",
+      "スタッフに質問したいです",
+      "空き状況を知りたいです",
+      "髪が痛みました",
+      "駐車場はありますか？",
+    ].join("\n");
+    expect(summarize(merged)).toBe(
+      "髪がバサバサなんですけどカットいくらですか（ほか4件のご連絡）",
+    );
+  });
+
+  it("長い1行は切り詰める", () => {
+    const long = "あ".repeat(80);
+    expect(summarize(long)).toBe(`${"あ".repeat(50)}…`);
+  });
+
+  it("空行は数えない", () => {
+    expect(summarize("空き状況を知りたいです\n\n土曜の午後が希望です")).toBe(
+      "空き状況を知りたいです（ほか1件のご連絡）",
+    );
   });
 });
 
