@@ -13,14 +13,12 @@ export const MENU_ITEMS = [
   { label: "⏱ 施術時間", text: "施術時間はどのくらいかかりますか" },
   { label: "📅 空き状況", text: "空き状況を知りたいです" },
   { label: "✏️ 予約の変更", text: "予約を変更したいです" },
+  // 最後の逃げ道。botが用件を拾えなかったときでも、
+  // お客様がここを押せば必ずオーナー様に届く。
+  { label: "💬 オーナーにきく", text: "スタッフに質問したいです" },
 ] as const;
 
-/** リッチメニューにだけあるボタン（クイックリプライは5件まで） */
-const RICH_MENU_ONLY = ["スタッフに質問したいです"];
-
-const BUTTON_TEXTS = new Set(
-  [...MENU_ITEMS.map((m) => m.text), ...RICH_MENU_ONLY].map(normalize),
-);
+const BUTTON_TEXTS = new Set(MENU_ITEMS.map((m) => normalize(m.text)));
 
 /**
  * ボタンを押して送られた文面かどうか。

@@ -150,10 +150,69 @@ export function canMergeInto(existing: Category, incoming: Category): boolean {
   return existing === incoming;
 }
 
+/** botが自分で答えて終わらせてよい種類 */
+const AUTO_ANSWER_CATEGORIES: Category[] = ["price", "duration", "hours", "menu"];
+
+/**
+ * 困りごと・ご不満をにおわせる言葉。
+ *
+ * ■ なぜ別に持つのか
+ *
+ *   「髪がバサバサなんですけどカットいくらですか」のように、
+ *   **ご不満と質問が混ざった文**が届く。
+ *   料金の言葉が入っているので料金と判定され、
+ *   botが金額だけ答えて終わり、**オーナー様には何も届かない**。
+ *
+ *   困っているお客様を、botが金額だけ返して突き放す——
+ *   これは本システムでもっとも起きてはいけないことなので、
+ *   **ひとつでも当てはまれば自動回答をやめ、人にまわす。**
+ *
+ * ■ 入れてよい言葉の条件
+ *
+ *   ここに当たると自動回答が止まるので、
+ *   ふつうの質問文に出てくる言葉を入れてはいけない。
+ *   「いた」は「いたします」「いただきます」に当たるため不可。
+ *   必ず2文字以上の、意味のはっきりした言葉にする。
+ */
+const CONCERN_WORDS = [
+  // 髪の状態
+  "傷", "痛", "ぱさ", "ばさ", "きしむ", "きしみ", "ごわ",
+  "枝毛", "えだげ", "切れ毛", "きれげ", "抜け毛", "ぬけげ", "薄く", "うすく",
+  "だめーじ",
+  // 「すぐ取れた」「もちが悪い」。
+  // 「予約取れますか」に当たらないよう、必ず後ろの言葉まで含める
+  "取れちゃ", "とれちゃ", "取れてしま", "とれてしま", "すぐ取れ", "すぐとれ",
+  "落ちちゃ", "おちちゃ", "もちが悪", "持ちが悪", "もたなく", "もたない",
+  // 気持ち
+  "ひどい", "酷い", "残念", "ざんねん", "がっかり", "怒", "謝",
+  "不安", "ふあん", "心配", "しんぱい", "悩", "なやん",
+  // 食い違い
+  "思ってた", "おもってた", "思ってる", "いめーじと", "違う", "ちがう", "違い", "ちがい",
+  "失敗", "しっぱい", "おかしい", "変です", "やり直", "やりなお",
+  // 申し立て
+  "くれーむ", "苦情", "くじょう", "返金", "へんきん", "相談", "そうだん",
+].map(normalize);
+
+/** 困りごとをにおわせる言葉が入っているか */
+export function hasConcernSignal(text: string): boolean {
+  const t = normalize(text);
+  return CONCERN_WORDS.some((w) => t.includes(w));
+}
+
 export function classify(text: string): Category {
   const t = normalize(text);
+
+  let category: Category = "other";
   for (const rule of NORMALIZED_RULES) {
-    if (rule.words.some((w) => t.includes(w))) return rule.category;
+    if (rule.words.some((w) => t.includes(w))) {
+      category = rule.category;
+      break;
+    }
   }
-  return "other";
+
+  // 困りごとがにおう文は、botが答えて終わらせない。必ず人にまわす。
+  if (AUTO_ANSWER_CATEGORIES.includes(category) && hasConcernSignal(text)) {
+    return "complaint";
+  }
+  return category;
 }

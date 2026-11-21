@@ -20,11 +20,15 @@ export function autoAnswer(category: Category, closedNote: string | null): strin
 
   if (body === null) return null;
 
+  // 自動回答は「答えて終わり」にしない。
+  // botが用件を取り違えても、お客様が自分で人にたどり着けるようにしておく。
+  const escape = `\n\n──────────\nほかにご不明な点やお困りごとがありましたら、そのままメッセージをお送りください。オーナーが確認してご返信いたします。`;
+
   // 休業のお知らせは、営業時間を聞かれたときに最優先で伝える
   if (closedNote && category === "hours") {
-    return `⚠️ ${closedNote}\n\n${body}`;
+    return `⚠️ ${closedNote}\n\n${body}${escape}`;
   }
-  return body;
+  return `${body}${escape}`;
 }
 
 /** 転送するものへの一次応答。お客様を待たせないための返事（F-05〜F-07・F-09） */

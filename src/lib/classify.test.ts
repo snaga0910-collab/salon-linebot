@@ -9,6 +9,7 @@ import {
   canMergeInto,
   classify,
   FORWARD_CATEGORIES,
+  hasConcernSignal,
   looksLikeQuestion,
 } from "./classify";
 
@@ -216,6 +217,63 @@ describe("未対応をひとつにまとめてよいか", () => {
     // 至急の通知が前の問い合わせに埋もれないようにする
     expect(canMergeInto("availability", "change")).toBe(false);
     expect(canMergeInto("other", "complaint")).toBe(false);
+  });
+});
+
+// ここが本システムでいちばん危ない場所。
+//
+// 「髪がバサバサなんですけどカットいくら」のように、
+// ご不満と質問が混ざった文は、料金と判定されて
+// botが金額だけ答えて終わってしまう。オーナー様には何も届かない。
+//
+// 困っているお客様を、botが金額だけ返して突き放すことになる。
+// 用件を拾えなくてもよいが、**人に届かないのは許されない**。
+describe("困りごとがにおう文は、botが答えて終わらせない", () => {
+  const mustForward = [
+    "髪がバサバサなんですけどカットいくら",
+    "傷んでるんですけどトリートメントいくら",
+    "色が思ってたのと違うんですが何時まで",
+    "前回失敗されたんですが料金は",
+    "やり直しは何分かかりますか",
+    "パーマが取れちゃったんですけどいくらですか",
+    "カラーがすぐ取れてしまいました",
+    "もちが悪いのですが何分かかりますか",
+    "料金について相談したいです",
+  ];
+
+  for (const text of mustForward) {
+    it(`「${text}」→ 自動回答せず人にまわす`, () => {
+      expect(FORWARD_CATEGORIES).toContain(classify(text));
+    });
+  }
+
+  // 逆に、ふつうの質問まで止めてしまうと自動回答の意味がなくなる
+  const mustAutoAnswer: [string, string][] = [
+    ["カラーっていくらですか", "price"],
+    ["総額でいくらになりますか", "price"],
+    ["何時までやってますか", "hours"],
+    ["最終受付は何時ですか", "hours"],
+    ["定休日はいつですか", "hours"],
+    ["カットとカラーだと何分かかりますか", "duration"],
+    ["どれくらいで終わりますか", "duration"],
+    ["メニューと料金を教えてください", "menu"],
+  ];
+
+  for (const [text, want] of mustAutoAnswer) {
+    it(`「${text}」→ ${want}（止めない）`, () => {
+      expect(classify(text)).toBe(want);
+    });
+  }
+
+  it("「予約取れますか」を『すぐ取れた』と取り違えない", () => {
+    expect(classify("土曜日に予約取れますか")).toBe("availability");
+  });
+
+  it("ふつうの言葉づかいに当たらない", () => {
+    // 「いた」は「いたします」「いただきます」に当たるため入れていない
+    expect(hasConcernSignal("よろしくお願いいたします")).toBe(false);
+    expect(hasConcernSignal("ご予約をいただきます")).toBe(false);
+    expect(hasConcernSignal("カラーっていくらですか")).toBe(false);
   });
 });
 

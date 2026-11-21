@@ -19,13 +19,14 @@ function followUp(text: string, category: Parameters<typeof followUpAcknowledgem
 }
 
 describe("ボタンの文面かどうか", () => {
-  it("クイックリプライの5件をすべて拾う", () => {
+  it("クイックリプライのボタンをすべて拾う", () => {
     for (const m of MENU_ITEMS) {
       expect(isButtonText(m.text)).toBe(true);
     }
   });
 
-  it("リッチメニューにしかない「その他のご質問」も拾う", () => {
+  it("最後の逃げ道「オーナーにきく」も拾う", () => {
+    // botが用件を取り違えても、ここを押せば必ずオーナー様に届く
     expect(isButtonText("スタッフに質問したいです")).toBe(true);
   });
 
@@ -42,8 +43,23 @@ describe("ボタンの文面かどうか", () => {
       new URL("../../scripts/setup_richmenu.py", import.meta.url),
       "utf8",
     );
-    for (const t of [...MENU_ITEMS.map((m) => m.text), "スタッフに質問したいです"]) {
-      expect(script, `${t} がスクリプトに見つかりません`).toContain(t);
+    for (const m of MENU_ITEMS) {
+      expect(script, `${m.text} がスクリプトに見つかりません`).toContain(m.text);
+    }
+  });
+});
+
+describe("自動回答にも、人へたどり着く道を残す", () => {
+  it("答えたあとに「そのままお送りください」と添える", () => {
+    // botが用件を取り違えても、お客様が自分で人にたどり着けるようにする
+    for (const c of ["price", "duration", "hours", "menu"] as const) {
+      expect(autoAnswer(c, null)).toContain("そのままメッセージをお送りください");
+    }
+  });
+
+  it("転送するものには添えない（すでに人へ渡っているため）", () => {
+    for (const c of ["availability", "change", "complaint", "other"] as const) {
+      expect(autoAnswer(c, null)).toBeNull();
     }
   });
 });
