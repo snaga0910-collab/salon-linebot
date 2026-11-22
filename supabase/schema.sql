@@ -11,9 +11,14 @@ create table if not exists public.sl_inquiries (
   message_text text not null,                 -- 問い合わせの本文
   message_id text,                            -- 送信取消への対応に使う（F-14）
   category text not null,                     -- availability / change / other / complaint
-  received_at timestamptz not null default now(),
+  received_at timestamptz not null default now(),  -- 最初にご連絡いただいた時刻
+  last_contact_at timestamptz not null default now(), -- 最後にご連絡いただいた時刻（F-16）
   handled_at timestamptz                      -- null のあいだは「未対応」
 );
+
+-- すでにテーブルを作ってある場合は、この1行だけ実行してください。
+alter table public.sl_inquiries
+  add column if not exists last_contact_at timestamptz not null default now();
 
 -- 未対応を古い順に取り出すため
 create index if not exists sl_inquiries_open_idx

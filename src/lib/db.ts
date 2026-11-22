@@ -13,7 +13,10 @@ export type Inquiry = {
   message_text: string;
   message_id: string | null;
   category: Category;
+  /** 最初にご連絡いただいた時刻 */
   received_at: string;
+  /** 最後にご連絡いただいた時刻。続きの連絡が来るたびに更新する（F-16） */
+  last_contact_at?: string;
   handled_at: string | null;
 };
 
@@ -100,11 +103,22 @@ export async function appendToInquiry(id: string, text: string): Promise<void> {
     return;
   }
 
+  // 「最後にご連絡いただいた時刻」も進める。
+  // これを忘れると、続きの連絡が届いたあとに
+  // 「すべて対応済みにする」を押したとき、読んでいない連絡ごと消えてしまう。
+  const row = { message_text: `${data.message_text}\n${text}` };
   const { error } = await getDb()
     .from("sl_inquiries")
-    .update({ message_text: `${data.message_text}\n${text}` })
+    .update({ ...row, last_contact_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) console.error("appendToInquiry failed:", error.message);
+
+  if (error) {
+    // last_contact_at 列をまだ作っていない場合の保険。
+    // supabase/schema.sql の alter table を実行すれば通る。
+    console.error("appendToInquiry failed:", error.message);
+    const retry = await getDb().from("sl_inquiries").update(row).eq("id", id);
+    if (retry.error) console.error("appendToInquiry retry failed:", retry.error.message);
+  }
 }
 
 /** 未対応を古い順に取り出す */
@@ -161,19 +175,30 @@ export async function markHandled(id: string): Promise<boolean> {
  * 朝8時の一覧を見たオーナー様が、9時に届いた問い合わせを知らないまま
  * 10時にボタンを押すことがある。そのとき9時の1件まで消してしまうと、
  * 「見ていない問い合わせが消える」という最悪の壊れ方になる。
+ *
+ * 見るのは received_at ではなく last_contact_at。
+ * まとめた問い合わせ（F-16）は、続きが届いても received_at が古いままなので、
+ * received_at で切ると「一覧のあとに届いた続き」を読まずに消してしまう。
  */
 export async function markAllHandled(before?: string): Promise<number> {
-  let q = getDb()
-    .from("sl_inquiries")
-    .update({ handled_at: new Date().toISOString() })
-    .is("handled_at", null);
+  const run = async (column: "last_contact_at" | "received_at") => {
+    let q = getDb()
+      .from("sl_inquiries")
+      .update({ handled_at: new Date().toISOString() })
+      .is("handled_at", null);
+    if (before) q = q.lte(column, before);
+    return q.select("id");
+  };
 
-  if (before) q = q.lte("received_at", before);
-
-  const { data, error } = await q.select("id");
+  let { data, error } = await run("last_contact_at");
+  if (error) {
+    // last_contact_at 列をまだ作っていない場合の保険
+    console.error("markAllHandled failed:", error.message);
+    ({ data, error } = await run("received_at"));
+  }
 
   if (error) {
-    console.error("markAllHandled failed:", error.message);
+    console.error("markAllHandled retry failed:", error.message);
     return 0;
   }
   return (data ?? []).length;
