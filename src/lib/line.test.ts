@@ -7,8 +7,11 @@ import { describe, expect, it } from "vitest";
 import {
   doneAllCutoff,
   doneAllData,
+  doneData,
   isDoneAll,
+  latestLine,
   openListMessage,
+  parseDone,
   summarize,
 } from "./line";
 import type { Inquiry } from "./db";
@@ -42,6 +45,31 @@ describe("ボタンに「いつの一覧か」を持たせる", () => {
     expect(isDoneAll("done:abc-123")).toBe(false);
     expect(isDoneAll("closed_off")).toBe(false);
     expect(isDoneAll("closed_prompt")).toBe(false);
+  });
+});
+
+describe("個別の「対応済み」ボタン", () => {
+  it("どの件か、いつ表示したかを持たせる", () => {
+    const at = "2026-11-22T01:22:00.000Z";
+    expect(parseDone(doneData("abc-123", at))).toEqual({ id: "abc-123", shownAt: at });
+  });
+
+  it("時刻を持たない古いボタンも受け付ける", () => {
+    // すでにオーナー様のトークに残っている通知は、押せなくなってはいけない
+    expect(parseDone("done:abc-123")).toEqual({ id: "abc-123", shownAt: null });
+  });
+
+  it("一括のボタンと混ざらない", () => {
+    expect(parseDone("done_all:2026-11-22T01:22:00.000Z")).toBeNull();
+    expect(parseDone("closed_off")).toBeNull();
+    expect(isDoneAll(doneData("abc-123", "2026-11-22T01:22:00.000Z"))).toBe(false);
+  });
+
+  it("続きの連絡のうち、いちばん新しい1行を取り出す", () => {
+    expect(latestLine("空き状況をしりたい\n駐車場はありますか？")).toBe(
+      "駐車場はありますか？",
+    );
+    expect(latestLine("空き状況をしりたい")).toBe("空き状況をしりたい");
   });
 });
 

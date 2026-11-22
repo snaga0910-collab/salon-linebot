@@ -26,6 +26,8 @@ import {
   inquiryNotice,
   isDoneAll,
   openListMessage,
+  parseDone,
+  staleDoneMessage,
   ownerUserId,
   plainText,
   push,
@@ -146,12 +148,24 @@ async function handle(event: LineEvent) {
       return;
     }
 
-    if (data.startsWith("done:")) {
-      const ok = await markHandled(data.slice("done:".length));
+    const done = parseDone(data);
+    if (done) {
+      const result = await markHandled(done.id, done.shownAt);
+
+      // ボタンを出したあとに続きの連絡が届いていたら、閉じずに見ていただく
+      if (result.status === "newer") {
+        await reply(event.replyToken, [staleDoneMessage(result.inquiry)]);
+        return;
+      }
+
       const left = await countOpenInquiries();
       const tail = left > 0 ? `\n残りの未対応：${left}件` : "\nこれで未対応はありません。";
       await reply(event.replyToken, [
-        plainText(ok ? `対応済みにしました。${tail}` : `すでに対応済みです。${tail}`),
+        plainText(
+          result.status === "done"
+            ? `対応済みにしました。${tail}`
+            : `すでに対応済みです。${tail}`,
+        ),
       ]);
     }
     return;

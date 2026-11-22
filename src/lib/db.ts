@@ -150,20 +150,61 @@ export async function countOpenInquiries(): Promise<number> {
   return count ?? 0;
 }
 
-/** 「対応済み」ボタンが押されたとき。すでに済みなら false を返す */
-export async function markHandled(id: string): Promise<boolean> {
+export type HandleResult =
+  | { status: "done" }
+  | { status: "already" }
+  /** ボタンを表示したあとに、続きの連絡が届いていた */
+  | { status: "newer"; inquiry: Inquiry };
+
+/**
+ * 「対応済み」ボタンが押されたとき。
+ *
+ * shownAt（ボタンを表示した時刻）より新しいご連絡が届いていたら、閉じない。
+ * 一覧に出ていたのは「空き状況をしりたい」でも、
+ * そのあと「駐車場はありますか？」が合流している（F-16）ことがある。
+ * そのまま閉じると、オーナー様が読んでいない質問ごと消える。
+ *
+ * 一度閉じると元に戻せないので、迷ったら閉じない側に倒す。
+ */
+export async function markHandled(
+  id: string,
+  shownAt?: string | null,
+): Promise<HandleResult> {
   const { data, error } = await getDb()
+    .from("sl_inquiries")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error) console.error("markHandled read failed:", error.message);
+    return { status: "already" };
+  }
+
+  const inquiry = data as Inquiry;
+  if (inquiry.handled_at) return { status: "already" };
+
+  if (shownAt) {
+    // 時刻の書き方が違う（+00:00 と Z）ので、文字列ではなく時刻として比べる
+    const last = Date.parse(inquiry.last_contact_at ?? inquiry.received_at);
+    const shown = Date.parse(shownAt);
+    if (Number.isFinite(last) && Number.isFinite(shown) && last > shown) {
+      return { status: "newer", inquiry };
+    }
+  }
+
+  const { data: updated, error: updateError } = await getDb()
     .from("sl_inquiries")
     .update({ handled_at: new Date().toISOString() })
     .eq("id", id)
     .is("handled_at", null)
     .select("id");
 
-  if (error) {
-    console.error("markHandled failed:", error.message);
-    return false;
+  if (updateError) {
+    console.error("markHandled failed:", updateError.message);
+    return { status: "already" };
   }
-  return (data ?? []).length > 0;
+  return (updated ?? []).length > 0 ? { status: "done" } : { status: "already" };
 }
 
 /**

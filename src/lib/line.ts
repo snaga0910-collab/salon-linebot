@@ -110,7 +110,34 @@ export function plainText(text: string): Json {
 // オーナー様が古い通知をあとから押したとき、
 // そのあとに届いた問い合わせまで消さないようにするため。
 
+const DONE = "done";
 const DONE_ALL = "done_all";
+
+/**
+ * 個別の「対応済みにする」ボタン。
+ *
+ * どの問い合わせかに加えて、**いつ表示したボタンか**を持たせる。
+ * 表示したあとにお客様から続きの連絡が届いていたら、
+ * それを読まないまま閉じてしまわないようにするため。
+ */
+export function doneData(id: string, shownAt: string): string {
+  return `${DONE}:${id}:${shownAt}`;
+}
+
+export function parseDone(data: string): { id: string; shownAt: string | null } | null {
+  if (!data.startsWith(`${DONE}:`)) return null;
+  const rest = data.slice(DONE.length + 1);
+  const sep = rest.indexOf(":");
+  // 時刻を持たない古いボタンも受け付ける（すでにトークに残っているため）
+  if (sep < 0) return { id: rest, shownAt: null };
+  return { id: rest.slice(0, sep), shownAt: rest.slice(sep + 1) };
+}
+
+/** 続きの連絡のうち、いちばん新しい1行 */
+export function latestLine(messageText: string): string {
+  const lines = messageText.split("\n").filter((l) => l.trim() !== "");
+  return lines.at(-1) ?? messageText;
+}
 
 export function doneAllData(listedAt: string): string {
   return `${DONE_ALL}:${listedAt}`;
@@ -137,7 +164,7 @@ const LABEL: Record<string, string> = {
   other: "お問い合わせ",
 };
 
-function doneButton(id: string): Json {
+function doneButton(id: string, shownAt = new Date().toISOString()): Json {
   return {
     type: "button",
     style: "primary",
@@ -146,8 +173,64 @@ function doneButton(id: string): Json {
     action: {
       type: "postback",
       label: "✅ 対応済みにする",
-      data: `done:${id}`,
+      data: doneData(id, shownAt),
       displayText: "対応済みにしました",
+    },
+  };
+}
+
+/**
+ * 表示したあとに続きの連絡が届いていたときの差し戻し。
+ *
+ * 勝手に閉じず、新しく届いた内容を見せたうえで、もう一度押していただく。
+ * 一度閉じると元に戻せないので、**迷ったら閉じない**側に倒す。
+ */
+export function staleDoneMessage(inquiry: Inquiry): Json {
+  return {
+    type: "flex",
+    altText: `新しいご連絡が届いています：${latestLine(inquiry.message_text).slice(0, 40)}`,
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          {
+            type: "text",
+            text: "まだ閉じていません",
+            weight: "bold",
+            size: "md",
+            color: "#D97706",
+            wrap: true,
+          },
+          {
+            type: "text",
+            text: `${inquiry.display_name ?? "お客様"} 様から、そのあと新しいご連絡が届いています。`,
+            size: "sm",
+            color: "#6B7280",
+            wrap: true,
+          },
+          {
+            type: "text",
+            text: `「${latestLine(inquiry.message_text)}」`,
+            size: "sm",
+            wrap: true,
+          },
+          {
+            type: "text",
+            text: "ご確認のうえ、下のボタンを押してください。",
+            size: "xs",
+            color: "#9CA3AF",
+            wrap: true,
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        contents: [doneButton(inquiry.id)],
+      },
     },
   };
 }
