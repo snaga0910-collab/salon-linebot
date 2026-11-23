@@ -8,7 +8,7 @@
 // 人の記憶に頼らず、ここで止める。
 
 import { describe, expect, it } from "vitest";
-import { DURATION_TEXT, HOURS_TEXT, MENU_TEXT, SALON } from "./salon";
+import { DURATION_TEXT, DURATIONS, HOURS_TEXT, MENU_TEXT, SALON } from "./salon";
 import { isOpenNow } from "./time";
 
 /** 「・カット　4,500円〜」のような金額の行を取り出す */
@@ -16,9 +16,10 @@ function priceLines(): string[] {
   return MENU_TEXT.split("\n").filter((l) => l.startsWith("・") && l.includes("円"));
 }
 
-/** 「17:00」→ 17 */
-function hourOf(hhmm: string): number {
-  return Number(hhmm.split(":")[0]);
+/** 「16:00」→ 960（その日の0時からの分数） */
+function minutesOf(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
 }
 
 describe("料金は断定しない", () => {
@@ -70,12 +71,43 @@ describe("営業時間の案内と、営業中の判定が食い違わない", (
   });
 
   it("最終受付は閉店より前", () => {
-    const close = hourOf(SALON.closeTime);
-    expect(hourOf(SALON.lastOrder.cut)).toBeLessThan(close);
-    expect(hourOf(SALON.lastOrder.color)).toBeLessThan(close);
+    const close = minutesOf(SALON.closeTime);
+    expect(minutesOf(SALON.lastOrder.cut)).toBeLessThan(close);
+    expect(minutesOf(SALON.lastOrder.color)).toBeLessThan(close);
   });
 
-  it("カラーのほうが、カットより早く締め切る（施術が長いため）", () => {
-    expect(hourOf(SALON.lastOrder.color)).toBeLessThan(hourOf(SALON.lastOrder.cut));
+  it("最終受付に来たお客様も、閉店までに終わる", () => {
+    // ここが守れていないと、閉店を過ぎてもお客様を椅子に座らせることになる。
+    // カット＋カラー（最長150分）の最終受付が17:00のままだと
+    // 19:30〜20:00になり、閉店19:00を超えていた
+    const close = minutesOf(SALON.closeTime);
+    for (const d of DURATIONS) {
+      const finish = minutesOf(SALON.lastOrder[d.chair]) + d.minutes;
+      expect(finish, `${d.name}（${d.label}）が閉店に間に合いません`).toBeLessThanOrEqual(
+        close,
+      );
+    }
+  });
+
+  it("薬剤を使うメニューのほうが、早く締め切る（施術が長いため）", () => {
+    expect(minutesOf(SALON.lastOrder.color)).toBeLessThan(
+      minutesOf(SALON.lastOrder.cut),
+    );
+  });
+});
+
+describe("料金表と施術時間の案内が、同じメニューをそろえている", () => {
+  it("料金表に載っているメニューは、施術時間にも載っている", () => {
+    // 「トリートメントってどのくらい？」に答えられない状態を防ぐ
+    for (const d of DURATIONS) {
+      expect(MENU_TEXT, `${d.name}が料金表にありません`).toContain(d.name);
+      expect(DURATION_TEXT, `${d.name}が施術時間にありません`).toContain(d.name);
+    }
+  });
+
+  it("最終受付の案内に、どのメニューがどちらかを書いている", () => {
+    expect(HOURS_TEXT).toContain("カット＋カラー");
+    expect(HOURS_TEXT).toContain(SALON.lastOrder.color);
+    expect(HOURS_TEXT).toContain(SALON.lastOrder.cut);
   });
 });
