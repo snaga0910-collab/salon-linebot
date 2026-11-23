@@ -121,6 +121,70 @@ export function followUpAcknowledgement(
   return "ありがとうございます。あわせてオーナーにお伝えいたします。";
 }
 
+/**
+ * 文字以外のメッセージ（スタンプ・お写真など）の種類。
+ *
+ * ■ なぜ必要か
+ *
+ *   以前は、文字以外のメッセージを何もせずに読み捨てていた。
+ *   エラーにはならないが、**お客様にもオーナー様にも何も届かない**。
+ *
+ *   「髪が傷んだ」とだけ書いて、あとは写真を送るお客様がいる。
+ *   そのお写真が誰にも届かないのは、本システムで最も起きてはいけないこと。
+ *   用件を読み取れないのは構わない。人に届かないのが許されない。
+ *
+ * ■ label と noun を分ける理由
+ *
+ *   label … 未対応の一覧とオーナー様への通知に出す言い方。
+ *           「何が届いたか」が一目で分かればよいので、記号で囲んで短くする。
+ *   noun  … お客様へのお返事で使う言い方。お客様に「［　］」は見せない。
+ */
+const NON_TEXT_KINDS: Record<string, { label: string; noun: string }> = {
+  sticker: { label: "［スタンプ］", noun: "スタンプ" },
+  image: { label: "［お写真］", noun: "お写真" },
+  video: { label: "［動画］", noun: "動画" },
+  audio: { label: "［音声メッセージ］", noun: "音声メッセージ" },
+  file: { label: "［ファイル］", noun: "ファイル" },
+  location: { label: "［位置情報］", noun: "位置情報" },
+};
+
+/** 知らない種類が増えても読み捨てないための受け皿 */
+const UNKNOWN_KIND = { label: "［メッセージ］", noun: "メッセージ" };
+
+/**
+ * 文字以外のメッセージなら、その種類を返す。文字のときは null。
+ *
+ * LINE がこれから新しい種類を増やしても、UNKNOWN_KIND に落ちて
+ * オーナー様には届く。知らないものを黙って捨てない。
+ */
+export function nonTextKind(
+  messageType: string,
+): { label: string; noun: string } | null {
+  if (messageType === "" || messageType === "text") return null;
+  return NON_TEXT_KINDS[messageType] ?? UNKNOWN_KIND;
+}
+
+/**
+ * 文字以外のメッセージへの一次応答。
+ *
+ * 中身は読み取れないので、**推測で答えない**（N-01と同じ考え方）。
+ * 「届いている」「人が見る」ことだけをお伝えして、人にまわす。
+ *
+ * あわせて文字でもお送りいただけるとお願いしておく。
+ * お写真だけだと、オーナー様がご用件を測りかねるため。
+ */
+export function nonTextAcknowledgement(noun: string, isOpen: boolean): string {
+  const afterHours = isOpen
+    ? ""
+    : "\n\n※ ただいま営業時間外のため、翌営業日のご連絡となります。";
+
+  return `${noun}をお送りいただきありがとうございます。
+
+オーナーが確認のうえ、改めてご返信いたします。
+
+※ ご用件を文字でもお送りいただけますと、より早くご案内できます。${afterHours}`;
+}
+
 // --- オーナー様専用のコマンド（スマホから操作できるようにするため：F-08・F-13） ---
 
 export const OWNER_HELP = `【オーナー様メニュー】

@@ -7,7 +7,13 @@
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import { MENU_ITEMS, isButtonText } from "./buttons";
-import { acknowledgement, autoAnswer, followUpAcknowledgement } from "./replies";
+import {
+  acknowledgement,
+  autoAnswer,
+  followUpAcknowledgement,
+  nonTextAcknowledgement,
+  nonTextKind,
+} from "./replies";
 
 const OPEN = true;
 const NO_NOTE = null;
@@ -143,5 +149,58 @@ describe("臨時休業のお知らせの出し方", () => {
 
   it("お知らせがなければ、何も足さない", () => {
     expect(acknowledgement("availability", OPEN, NO_NOTE)).not.toContain("⚠️");
+  });
+});
+
+describe("文字以外のメッセージ（スタンプ・お写真）", () => {
+  // 以前はここで読み捨てていた。
+  // 「髪が傷んだ」と書いたあとに写真だけ送るお客様がいるので、
+  // 誰にも届かないのは事故になる。
+
+  it("文字のときは null（ふだんの流れを変えない）", () => {
+    expect(nonTextKind("text")).toBeNull();
+    expect(nonTextKind("")).toBeNull();
+  });
+
+  it("スタンプ・お写真・動画・音声・ファイル・位置情報を見分ける", () => {
+    expect(nonTextKind("sticker")?.label).toBe("［スタンプ］");
+    expect(nonTextKind("image")?.label).toBe("［お写真］");
+    expect(nonTextKind("video")?.label).toBe("［動画］");
+    expect(nonTextKind("audio")?.label).toBe("［音声メッセージ］");
+    expect(nonTextKind("file")?.label).toBe("［ファイル］");
+    expect(nonTextKind("location")?.label).toBe("［位置情報］");
+  });
+
+  it("知らない種類も読み捨てず、オーナー様に届く形にする", () => {
+    // LINEが新しい種類を増やしても、黙って消えないこと
+    expect(nonTextKind("sowakaranai")).not.toBeNull();
+    expect(nonTextKind("sowakaranai")?.label).toBe("［メッセージ］");
+  });
+
+  it("お客様へのお返事に「［　］」を見せない", () => {
+    for (const type of ["sticker", "image", "video", "audio", "file", "location"]) {
+      const kind = nonTextKind(type)!;
+      const text = nonTextAcknowledgement(kind.noun, OPEN);
+      expect(text, `${type} のお返事に記号が出ています`).not.toContain("［");
+      expect(text).toContain(kind.noun);
+    }
+  });
+
+  it("中身を推測して答えない", () => {
+    // 料金・営業時間を推測で答えるのが、このシステムで一番の事故
+    const text = nonTextAcknowledgement("お写真", OPEN);
+    expect(text).not.toContain("円");
+    expect(text).not.toContain(":");
+    expect(text).toContain("オーナーが確認");
+  });
+
+  it("文字でもお送りいただけるようお願いしている", () => {
+    // お写真だけだと、オーナー様がご用件を測りかねる
+    expect(nonTextAcknowledgement("お写真", OPEN)).toContain("文字でも");
+  });
+
+  it("営業時間外なら、翌営業日になることを伝える", () => {
+    expect(nonTextAcknowledgement("スタンプ", false)).toContain("翌営業日");
+    expect(nonTextAcknowledgement("スタンプ", OPEN)).not.toContain("翌営業日");
   });
 });

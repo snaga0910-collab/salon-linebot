@@ -5,7 +5,12 @@
 //   ② 何があっても 200 を返す（LINE が再送し続けるのを防ぐ）
 
 import { NextResponse } from "next/server";
-import { canMergeInto, classify, FORWARD_CATEGORIES } from "@/lib/classify";
+import {
+  canMergeInto,
+  classify,
+  FORWARD_CATEGORIES,
+  type Category,
+} from "@/lib/classify";
 import { parseClosure, quickClosure } from "@/lib/closed";
 import {
   appendToInquiry,
@@ -42,6 +47,8 @@ import {
   closureSetMessage,
   followUpAcknowledgement,
   GREETING,
+  nonTextAcknowledgement,
+  nonTextKind,
   OWNER_HELP,
 } from "@/lib/replies";
 import { formatDateKey, isOpenNow } from "@/lib/time";
@@ -171,21 +178,37 @@ async function handle(event: LineEvent) {
     return;
   }
 
-  if (event.type !== "message" || event.message?.type !== "text") return;
+  if (event.type !== "message") return;
 
-  const text = (event.message.text ?? "").trim();
   const replyToken = event.replyToken;
-  if (!replyToken || text === "") return;
+  if (!replyToken) return;
+
+  const messageId = event.message?.id ?? null;
+
+  // スタンプ・お写真など、文字以外のメッセージ（F-21）。
+  //
+  // 以前はここで読み捨てていた。落ちはしないが、
+  // お客様にもオーナー様にも**何も届かない**状態だった。
+  // 中身は読み取れないので、推測で答えず、そのまま人にまわす。
+  const kind = nonTextKind(event.message?.type ?? "");
+
+  // オーナー様ご自身のスタンプを、ご自身に転送しない。
+  // （通し確認のためアカウントが1つでも動くようにしている都合）
+  if (kind && userId && userId === safeOwnerId()) return;
+
+  const text = kind ? kind.label : (event.message?.text ?? "").trim();
+  if (text === "") return;
 
   // オーナー様からの操作コマンド（F-08・F-13）
   // 決まった言葉のときだけコマンドとして扱い、それ以外は
   // お客様と同じ流れで処理する。こうしておくと、
   // アカウントが1つでも通し確認ができる。
-  if (userId && userId === safeOwnerId()) {
+  if (!kind && userId && userId === safeOwnerId()) {
     if (await handleOwnerCommand(text, replyToken)) return;
   }
 
-  const category = classify(text);
+  // 文字以外は中身が読めないため、必ず転送に倒す
+  const category: Category = kind ? "other" : classify(text);
   const closedNote = await getClosedNote();
 
   // 自動で答えられるもの（F-02・F-03・F-04）
@@ -230,15 +253,21 @@ async function handle(event: LineEvent) {
     const displayName = userId ? await getDisplayName(userId) : null;
 
     // 先にお客様へお返事する。お待たせしないことが一番大事。
+    // 文字以外のときは「お問い合わせありがとうございます」では的外れなので、
+    // 何が届いたかに合わせた文面でお返しする。
     await reply(replyToken, [
-      plainText(acknowledgement(category, isOpenNow(), closedNote)),
+      plainText(
+        kind
+          ? nonTextAcknowledgement(kind.noun, isOpenNow())
+          : acknowledgement(category, isOpenNow(), closedNote),
+      ),
     ]);
 
     const inquiry = await recordInquiry({
       lineUserId: userId,
       displayName,
       messageText: text,
-      messageId: event.message.id ?? null,
+      messageId,
       category,
     });
 
